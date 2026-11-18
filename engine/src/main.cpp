@@ -349,19 +349,19 @@ void send_message(App& app, int target_id, const std::string& text) {
   }
 
   if (targets.empty()) {
-    // Local loopback verification if no remote nodes are online yet
+    // Off-grid FM broadcast when no UDP/Serial peers are online yet
     std::vector<uint8_t> ct(text.begin(), text.end());
     if (ct.size() > 140) ct.resize(140);
     sl_crypt(app.cfg.id, seq, ct.data(), (uint8_t)ct.size());
     uint8_t rt_bytes[2] = {app.cfg.id, 0};
     uint8_t frame[SL_MAX_FRAME];
-    uint16_t flen = sl_build(frame, sizeof(frame), SL_T_MSG, 0, seq, app.cfg.id, app.cfg.id,
+    uint16_t flen = sl_build(frame, sizeof(frame), SL_T_MSG, 0, seq, app.cfg.id, SL_BROADCAST,
                              rt_bytes, 1, ct.data(), (uint8_t)ct.size());
     flen = sl_append_hop(frame, flen, sizeof(frame), app.cfg.id, 0);
     SlView v;
     int ok = flen && sl_parse(frame, flen, &v) && sl_verify(frame, &v);
     if (app.fm.tx() && flen) app.fm.transmit(std::vector<uint8_t>(frame, frame + flen), 0);
-    sl::logf("%s[LOCAL-LOOPBACK] seq=%u | carrier=75kHz (FM audio TX=%s) | HMAC=%s | STATUS: SUCCESS %d%s",
+    sl::logf("%s[FM-BROADCAST] seq=%u | carrier=75kHz (FM audio TX=%s) | HMAC=%s | STATUS: SUCCESS %d%s",
              SL_GRN, seq, app.fm.tx() ? "ON" : "OFF", ok ? "VERIFIED" : "FAIL",
              ok ? SL_CODE_SUCCESS : SL_CODE_TAMPER, SL_RST);
     return;
