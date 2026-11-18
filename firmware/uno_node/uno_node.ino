@@ -32,17 +32,39 @@ static SlLineDec usbDec, linkDec;
 static uint8_t frameBuf[SL_MAX_FRAME];
 static uint16_t mySeq = 1;
 static uint32_t lastHbMs = 0;
+static bool inHandle = false;
+
+static void handleFrame(const uint8_t* raw, uint16_t len);
+
+static void pollRx() {
+  if (inHandle) return;
+  while (Serial.available() > 0) {
+    char c = (char)Serial.read();
+    uint16_t n = sl_dec_feed(&usbDec, c);
+    if (n) {
+      inHandle = true;
+      handleFrame(usbDec.buf, n);
+      inHandle = false;
+    }
+  }
+}
 
 static void emitLine(const uint8_t* f, uint16_t len) {
   Serial.print(F("SL1 "));
-  linkSerial.print(F("SL1 "));
   for (uint16_t i = 0; i < len; i++) {
-    char hi = sl_hexc(f[i] >> 4), lo = sl_hexc(f[i] & 15);
-    Serial.write(hi); Serial.write(lo);
-    linkSerial.write(hi); linkSerial.write(lo);
+    Serial.write(sl_hexc(f[i] >> 4));
+    Serial.write(sl_hexc(f[i] & 15));
   }
   Serial.println();
+  Serial.flush();
+
+  linkSerial.print(F("SL1 "));
+  for (uint16_t i = 0; i < len; i++) {
+    linkSerial.write(sl_hexc(f[i] >> 4));
+    linkSerial.write(sl_hexc(f[i] & 15));
+  }
   linkSerial.println();
+  pollRx();
 }
 
 
@@ -53,7 +75,13 @@ static void sendHeartbeat() {
                           SL_BROADCAST, nullptr, 0, (const uint8_t*)pay, (uint8_t)plen);
   if (!len) return;
   len = sl_append_hop(frameBuf, len, sizeof(frameBuf), NODE_ID, CARRIER_IDX);
-  if (len) emitLine(frameBuf, len);
+  if (len) {
+    digitalWrite(LED_PIN, HIGH);
+    emitLine(frameBuf, len);
+    uint32_t t0 = millis();
+    while (millis() - t0 < 40) pollRx();
+    digitalWrite(LED_PIN, LOW);
+  }
 }
 
 static void handleFrame(const uint8_t* raw, uint16_t len) {
@@ -88,8 +116,12 @@ static void handleFrame(const uint8_t* raw, uint16_t len) {
     } else {
       Serial.println(F("[Arduino-Uno RX] TAMPER | STATUS: ERROR 401"));
     }
-    delay(20);
-    digitalWrite(LED_PIN, LOW);
+    for (int b = 0; b < 3; b++) {
+      digitalWrite(LED_PIN, HIGH);
+      delay(140);
+      digitalWrite(LED_PIN, LOW);
+      delay(80);
+    }
   }
 }
 
@@ -105,10 +137,7 @@ void setup() {
 }
 
 void loop() {
-  while (Serial.available() > 0) {
-    uint16_t n = sl_dec_feed(&usbDec, (char)Serial.read());
-    if (n) handleFrame(usbDec.buf, n);
-  }
+  pollRx();
   while (linkSerial.available() > 0) {
     uint16_t n = sl_dec_feed(&linkDec, (char)linkSerial.read());
     if (n) handleFrame(linkDec.buf, n);

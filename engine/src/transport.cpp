@@ -22,6 +22,7 @@
   #include <dirent.h>
   #include <fcntl.h>
   #include <netinet/in.h>
+  #include <sys/ioctl.h>
   #include <sys/select.h>
   #include <sys/socket.h>
   #include <termios.h>
@@ -221,6 +222,8 @@ static speed_t to_speed(int b) {
   }
 }
 
+static int64_t g_serial_open_ms = 0;
+
 bool SerialLink::open(const std::string& dev, int baud) {
   dev_ = dev;
   int fd = ::open(dev.c_str(), O_RDWR | O_NOCTTY);
@@ -235,7 +238,11 @@ bool SerialLink::open(const std::string& dev, int baud) {
   t.c_cc[VMIN] = 0;
   t.c_cc[VTIME] = 2;
   tcsetattr(fd, TCSANOW, &t);
+  int dtr = TIOCM_DTR, rts = TIOCM_RTS;
+  ioctl(fd, TIOCMBIS, &dtr);  // Enable DTR (required by Uno ATmega16U2 CDC bridge after avrdude)
+  ioctl(fd, TIOCMBIC, &rts);  // Disable RTS (keeps ESP32 out of reset)
   fd_ = fd;
+  g_serial_open_ms = now_ms();
   return true;
 }
 
@@ -258,10 +265,16 @@ void SerialLink::start(LineHandler hnd) {
 
 void SerialLink::send_line(const std::string& line) {
   if (fd_ < 0) return;
+  if (now_ms() - g_serial_open_ms < 2300) return;  // Do not disturb Uno Optiboot during 1.8s DTR reset
   std::lock_guard<std::mutex> g(wmu_);
-  std::string m = line + "\n";
-  ssize_t r = ::write(fd_, m.data(), m.size());
-  (void)r;
+  std::string m = "\n" + line + "\n";
+  for (size_t i = 0; i < m.size(); i += 16) {
+    size_t chunk = std::min((size_t)16, m.size() - i);
+    ssize_t r = ::write(fd_, m.data() + i, chunk);
+    (void)r;
+    tcdrain(fd_);
+    usleep(6000);
+  }
 }
 
 void SerialLink::stop() {

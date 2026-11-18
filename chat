@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BIN="$ROOT_DIR/engine/build/smartlink"
+
+if [[ ! -x "$BIN" ]]; then
+  "$ROOT_DIR/smartlink.sh" build
+fi
+
+if [[ -e /dev/ttyUSB0 ]]; then
+  exec "$BIN" --role hq --name Laptop-HQ --id 4 --serial /dev/ttyUSB0 --baud 115200 --verbose "$@"
+elif [[ -e /dev/ttyACM0 ]]; then
+  exec "$BIN" --role hq --name Laptop-HQ --id 4 --serial /dev/ttyACM0 --baud 38400 --verbose "$@"
+else
+  exec "$BIN" --role hq --name Laptop-HQ --id 4 --verbose "$@"
+fi

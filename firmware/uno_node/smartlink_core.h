@@ -355,7 +355,6 @@ static inline void sl_dec_init(SlLineDec* d) { d->len = 0; d->state = 0; d->nib 
 
 /* Feed one char. Returns frame length (>0) when a complete "SL1 ..." line ends, else 0. */
 static inline uint16_t sl_dec_feed(SlLineDec* d, char c) {
-  static const char P[] = "SL1 ";
   if (c == '\r') return 0;
   if (c == '\n') {
     uint16_t r = (d->state == 4 && !d->have) ? d->len : 0;
@@ -363,7 +362,8 @@ static inline uint16_t sl_dec_feed(SlLineDec* d, char c) {
     return r;
   }
   if (d->state < 4) {
-    if (c == P[d->state]) { if (d->state == 0) d->len = 0; d->state++; }
+    char exp = (d->state == 0) ? 'S' : (d->state == 1) ? 'L' : (d->state == 2) ? '1' : ' ';
+    if (c == exp) { if (d->state == 0) d->len = 0; d->state++; }
     else d->state = 5;
     return 0;
   }
