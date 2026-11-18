@@ -66,6 +66,17 @@ static void handleFrame(const uint8_t* raw, uint16_t len) {
     digitalWrite(LED_PIN, HIGH);
     tone(BUZZER_PIN, (unsigned int)(SL_CARRIERS_KHZ[CARRIER_IDX] * 10), 60);
     if (ok) {
+      // Decrypt payload in-place in frameBuf and print human-readable confirmation
+      uint8_t mlen = v.L < 64 ? v.L : 64;
+      memcpy(frameBuf, raw + v.off_payload, mlen);
+      sl_crypt(v.src, v.seq, frameBuf, mlen);
+      frameBuf[mlen] = '\0';
+      Serial.print(F("[Arduino-Uno RX] seq="));
+      Serial.print(v.seq);
+      Serial.print(F(" msg=\""));
+      Serial.print((const char*)frameBuf);
+      Serial.println(F("\" | STATUS: SUCCESS 400"));
+
       // Send ACK back to source
       uint8_t ackPay[4] = {(uint8_t)(v.seq >> 8), (uint8_t)v.seq,
                            (uint8_t)(SL_CODE_SUCCESS >> 8), (uint8_t)SL_CODE_SUCCESS};
@@ -74,6 +85,8 @@ static void handleFrame(const uint8_t* raw, uint16_t len) {
                                rt, 2, ackPay, 4);
       alen = sl_append_hop(frameBuf, alen, sizeof(frameBuf), NODE_ID, CARRIER_IDX);
       if (alen) emitLine(frameBuf, alen);
+    } else {
+      Serial.println(F("[Arduino-Uno RX] TAMPER | STATUS: ERROR 401"));
     }
     delay(20);
     digitalWrite(LED_PIN, LOW);
@@ -83,6 +96,7 @@ static void handleFrame(const uint8_t* raw, uint16_t len) {
 void setup() {
   Serial.begin(LINK_BAUD);
   linkSerial.begin(LINK_BAUD);
+  pinMode(LINK_RX_PIN, INPUT_PULLUP);
   pinMode(LED_PIN, OUTPUT);
   pinMode(BUZZER_PIN, OUTPUT);
   sl_dec_init(&usbDec);

@@ -87,7 +87,12 @@ static void sendHeartbeat() {
                           SL_BROADCAST, nullptr, 0, (const uint8_t*)pay, (uint8_t)plen);
   if (!len) return;
   len = sl_append_hop(f, len, sizeof(f), NODE_ID, CARRIER_IDX);
-  if (len) emitLine(f, len);
+  if (len) {
+    digitalWrite(LED_PIN, HIGH);
+    emitLine(f, len);
+    delay(40);
+    digitalWrite(LED_PIN, LOW);
+  }
 }
 
 static void handleFrame(const uint8_t* raw, uint16_t len) {
@@ -120,9 +125,22 @@ static void handleFrame(const uint8_t* raw, uint16_t len) {
       Serial.printf("[%s RX] seq=%u msg=\"%s\" | STATUS: %s %d\n",
                     NODE_NAME, v.seq, (const char*)pt,
                     ok ? "SUCCESS" : "TAMPER", ok ? SL_CODE_SUCCESS : SL_CODE_TAMPER);
+      if (ok && v.src != NODE_ID) {
+        uint8_t ackPay[4] = {(uint8_t)(v.seq >> 8), (uint8_t)v.seq,
+                             (uint8_t)(SL_CODE_SUCCESS >> 8), (uint8_t)SL_CODE_SUCCESS};
+        uint8_t rt[4] = {NODE_ID, CARRIER_IDX, v.src, CARRIER_IDX};
+        uint8_t af[SL_MAX_FRAME];
+        uint16_t alen = sl_build(af, sizeof(af), SL_T_ACK, 0, mySeq++, NODE_ID, v.src, rt, 2, ackPay, 4);
+        alen = sl_append_hop(af, alen, sizeof(af), NODE_ID, CARRIER_IDX);
+        if (alen) emitLine(af, alen);
+      }
     }
-    delay(20);
-    digitalWrite(LED_PIN, LOW);
+    for (int b = 0; b < 3; b++) {
+      digitalWrite(LED_PIN, HIGH);
+      delay(140);
+      digitalWrite(LED_PIN, LOW);
+      delay(80);
+    }
     return;
   }
 
