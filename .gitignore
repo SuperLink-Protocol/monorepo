@@ -1,0 +1,20 @@
+# Build artifacts
+engine/build/
+smartlink-node/target/
+*.exe
+*.o
+*.obj
+*.pdb
+*.d
+
+# Generated runtime files
+*.wav
+*.csv
+smartlink_fm_tx.wav
+hq_telemetry.csv
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.vs/
