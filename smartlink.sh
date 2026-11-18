@@ -28,12 +28,12 @@ case "$CMD" in
     [[ -x "$BIN" ]] || build_engine
     "$BIN" --self-test
     ;;
-  relay|hq)
+  relay|hq|chat)
     [[ -x "$BIN" ]] || build_engine
     exec "$BIN" --role "$CMD" --name "${NODE_NAME:-Pi-Node}" --id "${NODE_ID:-3}" "$@"
     ;;
   *)
-    echo "Usage: $0 {sync|build|test|relay|hq} [extra smartlink flags]"
+    echo "Usage: $0 {sync|build|test|chat|relay|hq} [extra smartlink flags]"
     exit 1
     ;;
 esac

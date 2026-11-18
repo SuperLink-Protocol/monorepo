@@ -10,8 +10,8 @@
 #>
 param(
   [Parameter(Position = 0)]
-  [ValidateSet("sync", "build", "test", "hq", "relay", "ports")]
-  [string]$Command = "hq",
+  [ValidateSet("sync", "build", "test", "hq", "chat", "relay", "ports")]
+  [string]$Command = "chat",
 
   [string]$Name = $env:COMPUTERNAME,
   [int]$Id = 4,
@@ -68,7 +68,7 @@ switch ($Command) {
   }
   default {
     if (-not (Test-Path $Exe)) { Build-Engine }
-    $role = if ($Command -eq "relay") { "relay" } else { "hq" }
+    $role = if ($Command -eq "relay") { "relay" } elseif ($Command -eq "chat") { "chat" } else { "hq" }
     $argsList = @("--role", $role, "--name", $Name, "--id", $Id, "--port", $Port, "--baud", $Baud)
     foreach ($s in $Serial) { $argsList += @("--serial", $s) }
     foreach ($p in $Peer)   { $argsList += @("--peer", $p) }

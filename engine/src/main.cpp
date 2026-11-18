@@ -236,9 +236,10 @@ void handle_frame(App& app, const uint8_t* raw, uint16_t len, const std::string&
       }
 
       if (ok) {
-        sl::logf("%s[RX %s] from=%s seq=%u | hops=[%s] | msg=\"%s\" | STATUS: SUCCESS %d%s",
-                 SL_GRN, via.c_str(), app.eng.name_of(v.src).c_str(), v.seq,
-                 hops_str.c_str(), msg.c_str(), SL_CODE_SUCCESS, SL_RST);
+        sl::logf("\r%s[%s @ %s] \"%s\" (hops=%u | STATUS: SUCCESS %d)%s",
+                 SL_GRN, app.eng.name_of(v.src).c_str(),
+                 v.H > 0 ? carrier_label(raw[v.off_hops + 1]).c_str() : "75kHz",
+                 msg.c_str(), v.H, SL_CODE_SUCCESS, SL_RST);
         if (v.src != app.cfg.id) send_ack(app, v.src, v.seq, SL_CODE_SUCCESS, v, raw);
       } else {
         sl::logf("%s[RX %s] from=%s seq=%u | HMAC CHAIN TAMPERED! | STATUS: ERROR %d%s",
@@ -583,7 +584,7 @@ int main(int argc, char** argv) {
   std::printf("  UDP Port: %u | Serial Links: %zu | FM TX: %s | FM RX: %s\n",
               cfg.udp_port, app.serials.size(), cfg.fm_tx ? "ON" : "OFF", cfg.fm_rx ? "ON" : "OFF");
   std::printf("%s================================================================%s\n", SL_BLD, SL_RST);
-  if (cfg.role == "hq") print_help();
+  if (cfg.role == "hq" || cfg.role == "chat") print_help();
 
   // Heartbeat + timeout monitor thread
   std::thread hb_th([&] {
@@ -598,7 +599,7 @@ int main(int argc, char** argv) {
           if (!n.self && n.online && (now - n.last_seen) > 6000) {
             n.online = false;
             changed = true;
-            sl::logf("%s[HEARTBEAT LOST] %s (ID=%u) disconnected -> Inference Engine rerouting!%s",
+            sl::logf("\r%s[HEARTBEAT LOST] %s (ID=%u) disconnected -> Inference Engine rerouting!%s",
                      SL_YEL, n.name.c_str(), n.id, SL_RST);
           }
         }
@@ -608,17 +609,18 @@ int main(int argc, char** argv) {
     }
   });
 
-  if (cfg.role != "hq") {
+  if (cfg.role != "hq" && cfg.role != "chat") {
     sl::logf("[%s] Relay Inference Engine running. Press Ctrl+C to stop.", cfg.name.c_str());
     while (app.running) std::this_thread::sleep_for(std::chrono::seconds(1));
   } else {
     std::string line;
     while (app.running) {
-      std::printf("smartlink-hq> ");
+      std::printf("[%s]> ", cfg.name.c_str());
       std::fflush(stdout);
       if (!std::getline(std::cin, line)) break;
       std::string cmd = sl::trim(line);
       if (cmd.empty()) continue;
+      if (!cmd.empty() && cmd[0] == '/') cmd = cmd.substr(1);
       if (cmd == "quit" || cmd == "exit") break;
       else if (cmd == "help") print_help();
       else if (cmd == "status") print_status(app);
