@@ -27,9 +27,9 @@
 #define NODE_ROLE   "relay"
 #define CARRIER_IDX 1          // 0=75kHz, 1=84kHz, 2=95kHz, 3=108kHz, 4=120kHz, 5=135kHz
 
-// Optional Wi-Fi UDP mesh (leave as-is to run over USB Serial / UART2 only)
-#define WIFI_SSID   "YOUR_WIFI_SSID"
-#define WIFI_PASS   "YOUR_WIFI_PASS"
+// Wi-Fi UDP mesh (auto-connects in background to NodeMCU v3 SMART-LINK-HQ AP)
+#define WIFI_SSID   "SMART-LINK-HQ"
+#define WIFI_PASS   "smartlink123"
 #define MESH_PORT   5050
 // ============================================================
 
@@ -40,6 +40,7 @@
 #define LED_PIN     2
 
 static WiFiUDP udp;
+static bool udpStarted = false;
 static SlLineDec usbDec, uart2Dec, udpDec;
 static uint16_t mySeq = 1;
 static uint32_t lastHbMs = 0;
@@ -70,8 +71,9 @@ static void emitLine(const uint8_t* f, uint16_t len) {
 
   Serial.println(line);
   Serial2.println(line);
-  if (WiFi.status() == WL_CONNECTED) {
-    IPAddress bcast(255, 255, 255, 255);
+  if (WiFi.status() == WL_CONNECTED && udpStarted) {
+    IPAddress bcast = WiFi.broadcastIP();
+    if (bcast == IPAddress(0, 0, 0, 0)) bcast = IPAddress(255, 255, 255, 255);
     udp.beginPacket(bcast, MESH_PORT);
     udp.println(line);
     udp.endPacket();
@@ -191,15 +193,26 @@ void setup() {
 
   if (strcmp(WIFI_SSID, "YOUR_WIFI_SSID") != 0) {
     WiFi.mode(WIFI_STA);
+    WiFi.setAutoReconnect(true);
     WiFi.begin(WIFI_SSID, WIFI_PASS);
-    uint32_t t0 = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - t0 < 8000) delay(200);
-    if (WiFi.status() == WL_CONNECTED) udp.begin(MESH_PORT);
   }
   sendHeartbeat();
 }
 
 void loop() {
+  if (WiFi.status() == WL_CONNECTED) {
+    if (!udpStarted) {
+      udp.begin(MESH_PORT);
+      udpStarted = true;
+      Serial.printf("[%s WIFI] Connected to %s (%s)\n",
+                    NODE_NAME, WIFI_SSID, WiFi.localIP().toString().c_str());
+      sendHeartbeat();
+    }
+  } else if (udpStarted) {
+    udp.stop();
+    udpStarted = false;
+  }
+
   while (Serial.available() > 0) {
     uint16_t n = sl_dec_feed(&usbDec, (char)Serial.read());
     if (n) handleFrame(usbDec.buf, n);
@@ -208,7 +221,7 @@ void loop() {
     uint16_t n = sl_dec_feed(&uart2Dec, (char)Serial2.read());
     if (n) handleFrame(uart2Dec.buf, n);
   }
-  if (WiFi.status() == WL_CONNECTED) {
+  if (udpStarted) {
     int pktSize = udp.parsePacket();
     while (pktSize-- > 0) {
       int ch = udp.read();
