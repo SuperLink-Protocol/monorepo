@@ -7,10 +7,12 @@ if [[ ! -x "$BIN" ]]; then
   "$ROOT_DIR/smartlink.sh" build
 fi
 
+EXTRA_PEERS=(--peer 192.168.4.1 --peer 192.168.4.255)
+
 if [[ -e /dev/ttyUSB0 ]]; then
-  exec "$BIN" --role hq --name Laptop-HQ --id 4 --serial /dev/ttyUSB0 --baud 115200 --verbose "$@"
+  exec "$BIN" --role hq --name Laptop-HQ --id 4 --serial /dev/ttyUSB0 --baud 115200 "${EXTRA_PEERS[@]}" --verbose "$@"
 elif [[ -e /dev/ttyACM0 ]]; then
-  exec "$BIN" --role hq --name Laptop-HQ --id 4 --serial /dev/ttyACM0 --baud 38400 --verbose "$@"
+  exec "$BIN" --role hq --name Laptop-HQ --id 4 --serial /dev/ttyACM0 --baud 38400 "${EXTRA_PEERS[@]}" --verbose "$@"
 else
-  exec "$BIN" --role hq --name Laptop-HQ --id 4 --verbose "$@"
+  exec "$BIN" --role hq --name Laptop-HQ --id 4 "${EXTRA_PEERS[@]}" --verbose "$@"
 fi

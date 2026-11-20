@@ -234,7 +234,12 @@ static void sendBroadcastMsg(const String& text) {
   len = sl_append_hop(f, len, sizeof(f), NODE_ID, CARRIER_IDX);
   if (!len) return;
 
-  emitLine(f, len);
+  // Transmit 3 redundant UDP bursts spaced 55ms apart to span the 100ms Wi-Fi modem-sleep
+  // beacon window; ESP32 nodes deduplicate by (type, src, seq) so all 3 flash reliably in sync.
+  for (int rep = 0; rep < 3; rep++) {
+    emitLine(f, len);
+    if (rep < 2) delay(55);
+  }
 
   char detail[96];
   snprintf(detail, sizeof(detail), "TX seq=%u \"%.*s\" (SHA-256 CTR + HMAC)",
