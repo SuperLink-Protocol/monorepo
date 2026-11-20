@@ -18,14 +18,16 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
+#include "soc/soc.h"
+#include "soc/rtc_cntl_reg.h"
 #define SL_NO_FM_RX
 #include "smartlink_core.h"
 
 // ==================== NODE CONFIGURATION ====================
-#define NODE_ID     1          // 1 for ESP32-1, 2 for ESP32-2 (or any unique ID 1..250)
-#define NODE_NAME   "ESP32-1"
+#define NODE_ID     3          // 1 for ESP32-1, 2 for ESP32-2 (or any unique ID 1..250)
+#define NODE_NAME   "ESP32-3"
 #define NODE_ROLE   "relay"
-#define CARRIER_IDX 1          // 0=75kHz, 1=84kHz, 2=95kHz, 3=108kHz, 4=120kHz, 5=135kHz
+#define CARRIER_IDX 3          // 0=75kHz, 1=84kHz, 2=95kHz, 3=108kHz, 4=120kHz, 5=135kHz
 
 // Wi-Fi UDP mesh (auto-connects in background to NodeMCU v3 SMART-LINK-HQ AP)
 #define WIFI_SSID   "SMART-LINK-HQ"
@@ -180,7 +182,12 @@ static void handleFrame(const uint8_t* raw, uint16_t len) {
   digitalWrite(LED_PIN, LOW);
 }
 
+static bool wifiStarted = false;
+
 void setup() {
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);  // prevent false brownout resets on breadboard rails
+  setCpuFrequencyMhz(80);                     // cuts idle/active current ~55% while staying fast
+
   Serial.begin(115200);
   Serial2.begin(38400, SERIAL_8N1, RXD2_PIN, TXD2_PIN);
   pinMode(TAMPER_PIN, INPUT_PULLUP);
@@ -191,16 +198,23 @@ void setup() {
   sl_dec_init(&uart2Dec);
   sl_dec_init(&udpDec);
 
-  if (strcmp(WIFI_SSID, "YOUR_WIFI_SSID") != 0) {
-    WiFi.mode(WIFI_STA);
-    WiFi.setAutoReconnect(true);
-    WiFi.begin(WIFI_SSID, WIFI_PASS);
-  }
   sendHeartbeat();
 }
 
 void loop() {
-  if (WiFi.status() == WL_CONNECTED) {
+  // Stagger Wi-Fi startup by NODE_ID (2.5s apart) so multiple ESP32s on one breadboard rail
+  // never trigger simultaneous RF calibration spikes.
+  if (!wifiStarted && strcmp(WIFI_SSID, "YOUR_WIFI_SSID") != 0 &&
+      millis() >= (uint32_t)NODE_ID * 2500UL) {
+    wifiStarted = true;
+    WiFi.mode(WIFI_STA);
+    WiFi.setTxPower(WIFI_POWER_8_5dBm);  // low peak current, plenty of room-scale range
+    WiFi.setSleep(true);
+    WiFi.setAutoReconnect(true);
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
+  }
+
+  if (wifiStarted && WiFi.status() == WL_CONNECTED) {
     if (!udpStarted) {
       udp.begin(MESH_PORT);
       udpStarted = true;
